@@ -152,3 +152,4 @@ docker compose up -d
 Github主页：[https://github.com/zhengshengning](https://github.com/zhengshengning)
 
 个人博客：[https://ningzhengsheng.cn](https://ningzhengsheng.cn)
+deploy test
