@@ -15,6 +15,7 @@ import { ChevronIcon, CloseIcon, CloudIcon, DragIcon, EditIcon, ExitIcon, EyeIco
 import githubImg from "./assets/github.svg";
 import wxChatImg from "./assets/wxChat.jpeg";
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { buildAnalysisApiUrl, DEFAULT_ANALYSIS_API_URL } from './lib/analysisApi.mjs';
 import { fetchFundData, fetchIntradayData, fetchLatestRelease, fetchShanghaiIndexDate, fetchSmartFundNetValue, searchFunds, submitFeedback } from './api/fund';
 import packageJson from '../package.json';
 
@@ -1250,70 +1251,600 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
   );
 }
 
+function AnalysisMetric({ label, value, tone }) {
+  return (
+    <div className="native-analysis-metric">
+      <span>{label}</span>
+      <strong className={tone ? `tone-${tone}` : ''}>{value ?? '--'}</strong>
+    </div>
+  );
+}
+
+function AnalysisPill({ children, tone = 'neutral' }) {
+  return <span className={`native-analysis-pill tone-${tone}`}>{children}</span>;
+}
+
+function getDecisionTone(action) {
+  if (['buy', 'small_buy', 'add'].includes(action)) return 'up';
+  if (['sell', 'reduce', 'avoid'].includes(action)) return 'down';
+  if (['wait', 'hold'].includes(action)) return 'warn';
+  return 'neutral';
+}
+
+function formatAnalysisError(error) {
+  if (!error) return '';
+  if (error.name === 'AbortError') return '请求超时，请稍后重试';
+  return `请求失败：${error.message || '请确认本地基金分析服务已启动'}`;
+}
+
+function NativeAnalysisResult({ result, showRaw, onToggleRaw }) {
+  if (!result) return null;
+  if (!result.success) {
+    return (
+      <div className="native-analysis-card native-analysis-error">
+        <h3>分析失败</h3>
+        <p>{result.error || '没有拿到有效分析结果'}</p>
+      </div>
+    );
+  }
+
+  const fund = result.fund || {};
+  const metrics = result.metrics || {};
+  const analysis = result.analysis || {};
+  const risk = result.risk || {};
+  const prediction = result.prediction || {};
+  const finalDecision = result.final_decision || {};
+  const highConfidence = result.high_confidence_decision || {};
+  const decisionTone = getDecisionTone(finalDecision.action || highConfidence.action);
+
+  return (
+    <div className="native-analysis-results">
+      <div className="native-analysis-card hero-decision">
+        <div className="native-analysis-card-head">
+          <div>
+            <span className="native-analysis-kicker">最终参考结论</span>
+            <h2>{finalDecision.headline || analysis.conclusion || fund.name || '分析结果'}</h2>
+          </div>
+          <AnalysisPill tone={decisionTone}>
+            {finalDecision.action_label || highConfidence.action_label || '观察'}
+          </AnalysisPill>
+        </div>
+        <p className="native-analysis-summary">
+          {finalDecision.summary || analysis.note || '本结果仅供个人研究参考，不构成投资建议。'}
+        </p>
+        <div className="native-analysis-metrics-grid compact">
+          <AnalysisMetric label="置信度" value={finalDecision.confidence || analysis.confidence || '--'} tone={decisionTone} />
+          <AnalysisMetric label="风险分" value={finalDecision.risk_score ?? risk.risk_score} />
+          <AnalysisMetric label="7天上涨概率" value={finalDecision.up_probability_7d != null ? `${finalDecision.up_probability_7d}%` : '--'} />
+          <AnalysisMetric label="30天上涨概率" value={finalDecision.up_probability_30d != null ? `${finalDecision.up_probability_30d}%` : '--'} />
+        </div>
+        {Array.isArray(finalDecision.why) && finalDecision.why.length > 0 && (
+          <ul className="native-analysis-list">
+            {finalDecision.why.slice(0, 3).map((item, index) => <li key={index}>{item}</li>)}
+          </ul>
+        )}
+      </div>
+
+      <div className="native-analysis-grid two">
+        <div className="native-analysis-card">
+          <div className="native-analysis-card-head">
+            <div>
+              <span className="native-analysis-kicker">基金信息</span>
+              <h3>{fund.name || '未知基金'}</h3>
+            </div>
+            <span className="fund-code-badge">#{fund.code || '--'}</span>
+          </div>
+          <div className="native-analysis-tags">
+            <AnalysisPill>{fund.type || '类型未知'}</AnalysisPill>
+            <AnalysisPill>{fund.company || '公司未知'}</AnalysisPill>
+            {metrics.current_estimate?.estimate_time && <AnalysisPill>估值 {metrics.current_estimate.estimate_time}</AnalysisPill>}
+          </div>
+          <div className="native-analysis-metrics-grid">
+            <AnalysisMetric label="最新净值" value={metrics.latest_nav} />
+            <AnalysisMetric label="日涨跌" value={metrics.daily_return != null ? `${metrics.daily_return}%` : '--'} tone={metrics.daily_return >= 0 ? 'up' : 'down'} />
+            <AnalysisMetric label="估算涨跌" value={metrics.current_estimate?.estimated_change_pct != null ? `${metrics.current_estimate.estimated_change_pct}%` : '--'} tone={metrics.current_estimate?.estimated_change_pct >= 0 ? 'up' : 'down'} />
+            <AnalysisMetric label="最大回撤" value={metrics.max_drawdown != null ? `${metrics.max_drawdown}%` : '--'} tone="down" />
+          </div>
+        </div>
+
+        <div className="native-analysis-card">
+          <div className="native-analysis-card-head">
+            <div>
+              <span className="native-analysis-kicker">风险与预测</span>
+              <h3>{risk.risk_level || '风险画像'}</h3>
+            </div>
+            <AnalysisPill tone={risk.risk_score > 70 ? 'down' : risk.risk_score > 45 ? 'warn' : 'up'}>
+              {risk.risk_score ?? '--'} 分
+            </AnalysisPill>
+          </div>
+          <div className="native-risk-bar">
+            <span style={{ width: `${Math.max(0, Math.min(100, risk.risk_score || 0))}%` }} />
+          </div>
+          <div className="native-analysis-metrics-grid">
+            <AnalysisMetric label="预测质量" value={prediction.quality || '--'} />
+            <AnalysisMetric label="模型依据" value={prediction.model_basis || '--'} />
+            <AnalysisMetric label="短期方向" value={prediction.direction || prediction.trend || '--'} />
+            <AnalysisMetric label="操作建议" value={highConfidence.action_label || '--'} tone={getDecisionTone(highConfidence.action)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="native-analysis-card">
+        <div className="native-analysis-card-head">
+          <div>
+            <span className="native-analysis-kicker">策略细节</span>
+            <h3>买入、减仓与观察条件</h3>
+          </div>
+          <button className="button secondary analysis-button small" onClick={onToggleRaw}>
+            {showRaw ? '收起原始数据' : '查看原始数据'}
+          </button>
+        </div>
+        <div className="native-analysis-grid three">
+          <div>
+            <h4>可考虑买入</h4>
+            <ul className="native-analysis-list">
+              {(analysis.buy_conditions || highConfidence.buy_conditions || ['暂无明确买入条件']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h4>需要减仓</h4>
+            <ul className="native-analysis-list">
+              {(analysis.reduce_conditions || highConfidence.sell_conditions || ['暂无明确减仓条件']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h4>重点观察</h4>
+            <ul className="native-analysis-list">
+              {(analysis.watch_points || finalDecision.warning || ['继续观察净值、估值和市场风格变化']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+        {showRaw && (
+          <pre className="native-analysis-raw">{JSON.stringify(result, null, 2)}</pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FundAnalysisView() {
-  const analysisUrl = process.env.NEXT_PUBLIC_ANALYSIS_URL || 'http://127.0.0.1:3000';
-  const analysisHealthUrl = process.env.NEXT_PUBLIC_ANALYSIS_HEALTH_URL || 'http://127.0.0.1:8000/api/health';
-  const [status, setStatus] = useState('checking');
+  const apiBase = process.env.NEXT_PUBLIC_ANALYSIS_API_URL || DEFAULT_ANALYSIS_API_URL;
+  const [serviceStatus, setServiceStatus] = useState('checking');
+  const [innerTab, setInnerTab] = useState('single');
+  const [code, setCode] = useState('');
+  const [positionOpen, setPositionOpen] = useState(false);
+  const [position, setPosition] = useState({
+    cost_nav: '',
+    holding_amount: '',
+    holding_units: '',
+    planned_buy_amount: '',
+    is_dca: false,
+    monthly_dca_amount: '',
+    max_loss_percent: '15',
+    holding_horizon: '1年以上',
+    risk_preference: '平衡',
+  });
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [showRaw, setShowRaw] = useState(false);
+  const [myFunds, setMyFunds] = useState([]);
+  const [newFundCode, setNewFundCode] = useState('');
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [batchResults, setBatchResults] = useState([]);
+  const [macro, setMacro] = useState(null);
+  const [macroLoading, setMacroLoading] = useState(false);
+
+  const requestApi = useCallback(async (path, options = {}) => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), options.timeout || 120000);
+    try {
+      const response = await fetch(buildAnalysisApiUrl(path, apiBase), {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.headers || {}),
+        },
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || `请求失败 (${response.status})`);
+      }
+      return data;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }, [apiBase]);
 
   const checkStatus = useCallback(async () => {
-    setStatus('checking');
+    setServiceStatus('checking');
     try {
-      const response = await fetch(analysisHealthUrl, { cache: 'no-store' });
-      setStatus(response.ok ? 'ready' : 'offline');
+      await requestApi('/api/health', { timeout: 12000 });
+      setServiceStatus('ready');
     } catch (err) {
-      setStatus('offline');
+      setServiceStatus('offline');
     }
-  }, [analysisHealthUrl]);
+  }, [requestApi]);
+
+  const loadMyFunds = useCallback(async () => {
+    setPortfolioLoading(true);
+    try {
+      const data = await requestApi('/api/my-funds', { timeout: 15000 });
+      setMyFunds(data.funds || []);
+    } catch (err) {
+      setError(formatAnalysisError(err));
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, [requestApi]);
+
+  const loadMacro = useCallback(async () => {
+    setMacroLoading(true);
+    try {
+      setMacro(await requestApi('/api/macro', { timeout: 30000 }));
+    } catch (err) {
+      setError(formatAnalysisError(err));
+    } finally {
+      setMacroLoading(false);
+    }
+  }, [requestApi]);
 
   useEffect(() => {
     checkStatus();
   }, [checkStatus]);
 
+  useEffect(() => {
+    if (serviceStatus !== 'ready') return;
+    if (innerTab === 'portfolio') loadMyFunds();
+    if (innerTab === 'market' && !macro) loadMacro();
+  }, [innerTab, loadMacro, loadMyFunds, macro, serviceStatus]);
+
+  const analyzeFund = async () => {
+    const trimmed = code.trim();
+    if (!/^\d{5,6}$/.test(trimmed)) {
+      setError('请输入5-6位数字基金代码');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setResult(null);
+    try {
+      const payload = positionOpen ? {
+        code: trimmed,
+        position: {
+          cost_nav: position.cost_nav ? Number(position.cost_nav) : undefined,
+          holding_amount: position.holding_amount ? Number(position.holding_amount) : undefined,
+          holding_units: position.holding_units ? Number(position.holding_units) : undefined,
+          planned_buy_amount: position.planned_buy_amount ? Number(position.planned_buy_amount) : undefined,
+          is_dca: position.is_dca,
+          monthly_dca_amount: position.monthly_dca_amount ? Number(position.monthly_dca_amount) : undefined,
+          max_loss_percent: position.max_loss_percent ? Number(position.max_loss_percent) : undefined,
+          holding_horizon: position.holding_horizon || undefined,
+          risk_preference: position.risk_preference || undefined,
+        },
+      } : null;
+      const data = payload
+        ? await requestApi('/api/analyze', { method: 'POST', body: JSON.stringify(payload) })
+        : await requestApi(`/api/analyze?code=${encodeURIComponent(trimmed)}`);
+      setResult(data);
+      if (!data.success) setError(data.error || '分析失败');
+    } catch (err) {
+      setError(formatAnalysisError(err));
+      setServiceStatus('offline');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addFundToPortfolio = async () => {
+    const trimmed = newFundCode.trim();
+    if (!/^\d{5,6}$/.test(trimmed)) {
+      setError('请输入5-6位数字基金代码');
+      return;
+    }
+    setPortfolioLoading(true);
+    setError('');
+    try {
+      await requestApi('/api/my-funds', {
+        method: 'POST',
+        body: JSON.stringify({ code: trimmed }),
+        timeout: 15000,
+      });
+      setNewFundCode('');
+      await loadMyFunds();
+    } catch (err) {
+      setError(formatAnalysisError(err));
+    } finally {
+      setPortfolioLoading(false);
+    }
+  };
+
+  const deleteFundFromPortfolio = async (fundCode) => {
+    setPortfolioLoading(true);
+    setError('');
+    try {
+      await requestApi(`/api/my-funds/${fundCode}`, { method: 'DELETE', timeout: 15000 });
+      setBatchResults((prev) => prev.filter((item) => item.code !== fundCode));
+      await loadMyFunds();
+    } catch (err) {
+      setError(formatAnalysisError(err));
+    } finally {
+      setPortfolioLoading(false);
+    }
+  };
+
+  const batchAnalyze = async () => {
+    setPortfolioLoading(true);
+    setError('');
+    setBatchResults([]);
+    try {
+      const data = await requestApi('/api/my-funds/analyze', { method: 'POST' });
+      setBatchResults(data.results || []);
+    } catch (err) {
+      setError(formatAnalysisError(err));
+    } finally {
+      setPortfolioLoading(false);
+    }
+  };
+
   return (
-    <section className="analysis-workspace" aria-label="基金分析">
+    <section className="analysis-workspace native-analysis" aria-label="基金分析">
       <div className="analysis-toolbar glass">
         <div>
           <div className="analysis-title">基金分析</div>
           <div className="muted analysis-subtitle">
-            本地深度分析服务：{analysisUrl}
+            原生分析工作台，连接本机服务：{apiBase}
           </div>
         </div>
         <div className="analysis-actions">
+          <AnalysisPill tone={serviceStatus === 'ready' ? 'up' : serviceStatus === 'checking' ? 'warn' : 'down'}>
+            {serviceStatus === 'ready' ? '服务已连接' : serviceStatus === 'checking' ? '检测中' : '服务未启动'}
+          </AnalysisPill>
           <button className="button secondary analysis-button" onClick={checkStatus}>
             重新检测
-          </button>
-          <button className="button analysis-button" onClick={() => window.open(analysisUrl, '_blank', 'noopener,noreferrer')}>
-            打开分析系统
           </button>
         </div>
       </div>
 
-      {status === 'ready' ? (
-        <div className="analysis-frame-shell glass">
-          <iframe
-            className="analysis-frame"
-            title="基金分析系统"
-            src={analysisUrl}
-          />
-        </div>
-      ) : (
-        <div className="analysis-empty glass card">
+      <div className="native-analysis-tabs glass">
+        {[
+          ['single', '单只分析'],
+          ['portfolio', '我的组合'],
+          ['market', '宏观一览'],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            className={`native-analysis-tab ${innerTab === key ? 'active' : ''}`}
+            onClick={() => setInnerTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {serviceStatus === 'offline' && (
+        <div className="analysis-empty glass card compact">
           <div className="analysis-empty-icon">⌁</div>
-          <h2>{status === 'checking' ? '正在检测基金分析服务' : '请先启动基金分析服务'}</h2>
-          <p className="muted">
-            在本机运行 fund-analysis-agent 的 start_local.command 后，再点击重新检测。
-          </p>
+          <h2>请先启动基金分析服务</h2>
+          <p className="muted">本页已经合并到养基小宝，但深度分析仍需要你电脑上的 Python 服务来抓取实时数据。</p>
           <code className="analysis-command">
             /Users/cheoungfoon/Desktop/ssssgenius-ai power/fund-analysis-agent/start_local.command
           </code>
-          <div className="analysis-actions">
-            <button className="button secondary analysis-button" onClick={checkStatus}>
-              重新检测
-            </button>
-            <button className="button analysis-button" onClick={() => window.open(analysisUrl, '_blank', 'noopener,noreferrer')}>
-              打开分析系统
+        </div>
+      )}
+
+      {error && <div className="native-analysis-alert">{error}</div>}
+
+      {innerTab === 'single' && (
+        <>
+          <div className="native-analysis-card native-analysis-search">
+            <input
+              className="input"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && analyzeFund()}
+              placeholder="输入基金代码，如 161725、110022、510300"
+              maxLength={6}
+            />
+            <button className="button analysis-button" onClick={analyzeFund} disabled={loading || serviceStatus !== 'ready'}>
+              {loading ? '分析中...' : '开始分析'}
             </button>
           </div>
+
+          <div className="native-position-toggle">
+            <button className="button secondary analysis-button" onClick={() => setPositionOpen((value) => !value)}>
+              {positionOpen ? '收起我的持仓' : '填写我的持仓'}
+            </button>
+          </div>
+
+          {positionOpen && (
+            <div className="native-analysis-card">
+              <div className="native-analysis-card-head">
+                <div>
+                  <span className="native-analysis-kicker">个人持仓</span>
+                  <h3>让建议更贴近你的成本和仓位</h3>
+                </div>
+              </div>
+              <div className="native-form-grid">
+                {[
+                  ['cost_nav', '持仓成本价', '如 0.75'],
+                  ['holding_amount', '持有金额', '如 10000'],
+                  ['holding_units', '持有份额', '如 13000'],
+                  ['planned_buy_amount', '计划买入金额', '如 5000'],
+                  ['monthly_dca_amount', '每月定投金额', '如 1000'],
+                  ['max_loss_percent', '最大可承受亏损%', '如 15'],
+                ].map(([key, label, placeholder]) => (
+                  <label key={key} className="native-form-field">
+                    <span>{label}</span>
+                    <input
+                      className="input"
+                      value={position[key]}
+                      onChange={(event) => setPosition((prev) => ({ ...prev, [key]: event.target.value }))}
+                      placeholder={placeholder}
+                    />
+                  </label>
+                ))}
+                <label className="native-form-field">
+                  <span>持有周期</span>
+                  <select className="input" value={position.holding_horizon} onChange={(event) => setPosition((prev) => ({ ...prev, holding_horizon: event.target.value }))}>
+                    <option value="">不填写</option>
+                    <option value="短期">短期</option>
+                    <option value="3-6个月">3-6个月</option>
+                    <option value="1年以上">1年以上</option>
+                  </select>
+                </label>
+                <label className="native-form-field">
+                  <span>操作偏好</span>
+                  <select className="input" value={position.risk_preference} onChange={(event) => setPosition((prev) => ({ ...prev, risk_preference: event.target.value }))}>
+                    <option value="">不填写</option>
+                    <option value="保守">保守</option>
+                    <option value="平衡">平衡</option>
+                    <option value="激进">激进</option>
+                  </select>
+                </label>
+                <label className="native-checkbox">
+                  <input type="checkbox" checked={position.is_dca} onChange={(event) => setPosition((prev) => ({ ...prev, is_dca: event.target.checked }))} />
+                  <span>我正在定投</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {loading && (
+            <div className="native-analysis-card native-analysis-loading">
+              <div className="spinner" />
+              <p>正在获取基金数据并生成分析...</p>
+            </div>
+          )}
+
+          <NativeAnalysisResult result={result} showRaw={showRaw} onToggleRaw={() => setShowRaw((value) => !value)} />
+        </>
+      )}
+
+      {innerTab === 'portfolio' && (
+        <div className="native-analysis-card">
+          <div className="native-analysis-card-head">
+            <div>
+              <span className="native-analysis-kicker">我的组合</span>
+              <h3>添加基金后可批量生成分析</h3>
+            </div>
+            <div className="analysis-actions">
+              <button className="button secondary analysis-button small" onClick={loadMyFunds} disabled={portfolioLoading || serviceStatus !== 'ready'}>刷新</button>
+              <button className="button analysis-button small" onClick={batchAnalyze} disabled={portfolioLoading || myFunds.length === 0 || serviceStatus !== 'ready'}>
+                批量分析
+              </button>
+            </div>
+          </div>
+          <div className="native-analysis-search compact">
+            <input
+              className="input"
+              value={newFundCode}
+              onChange={(event) => setNewFundCode(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && addFundToPortfolio()}
+              placeholder="输入基金代码添加到组合"
+              maxLength={6}
+            />
+            <button className="button analysis-button" onClick={addFundToPortfolio} disabled={portfolioLoading || serviceStatus !== 'ready'}>添加</button>
+          </div>
+          <div className="native-fund-list">
+            {myFunds.length === 0 ? (
+              <p className="muted native-empty-line">还没有添加基金</p>
+            ) : (
+              myFunds.map((fund) => (
+                <div className="native-fund-row" key={fund.code}>
+                  <div>
+                    <strong>{fund.code}</strong>
+                    <span>{fund.note || '未填写备注'}</span>
+                  </div>
+                  <div className="native-fund-row-meta">
+                    {fund.cost_nav != null && <span>成本 {fund.cost_nav}</span>}
+                    {fund.holding_amount != null && <span>金额 {fund.holding_amount}</span>}
+                    {fund.is_dca && <span>定投</span>}
+                    <button className="button secondary analysis-button mini" onClick={() => deleteFundFromPortfolio(fund.code)}>删除</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {portfolioLoading && <p className="muted native-empty-line">正在处理...</p>}
+          {batchResults.length > 0 && (
+            <div className="native-batch-results">
+              {batchResults.map((item) => (
+                <div className="native-batch-card" key={item.code}>
+                  <div>
+                    <strong>{item.fund?.name || item.code}</strong>
+                    <span>#{item.code}</span>
+                  </div>
+                  <AnalysisPill tone={getDecisionTone(item.final_decision?.action || item.high_confidence_decision?.action)}>
+                    {item.final_decision?.action_label || item.high_confidence_decision?.action_label || item.analysis?.conclusion || '观察'}
+                  </AnalysisPill>
+                  <p>{item.final_decision?.summary || item.analysis?.note || item.error || '暂无摘要'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {innerTab === 'market' && (
+        <div className="native-analysis-card">
+          <div className="native-analysis-card-head">
+            <div>
+              <span className="native-analysis-kicker">宏观一览</span>
+              <h3>市场环境与风格信号</h3>
+            </div>
+            <button className="button secondary analysis-button small" onClick={loadMacro} disabled={macroLoading || serviceStatus !== 'ready'}>
+              {macroLoading ? '刷新中' : '刷新'}
+            </button>
+          </div>
+          {macro ? (
+            <div className="native-macro-board">
+              <div className="native-macro-summary">
+                <span className="native-analysis-kicker">市场摘要</span>
+                <p>{(macro.macro || macro).summary || (macro.macro || macro).macro_summary?.text || '暂无宏观摘要'}</p>
+              </div>
+              <div className="native-analysis-grid two">
+                <div className="native-macro-panel">
+                  <h4>风格信号</h4>
+                  <div className="native-analysis-metrics-grid">
+                    <AnalysisMetric label="风险偏好" value={(macro.macro || macro).macro_summary?.risk_appetite || '--'} />
+                    <AnalysisMetric label="海外方向" value={(macro.macro || macro).macro_summary?.overseas_direction || '--'} />
+                    <AnalysisMetric label="汇率压力" value={(macro.macro || macro).macro_summary?.forex_pressure || '--'} />
+                    <AnalysisMetric label="商品扰动" value={(macro.macro || macro).macro_summary?.commodity_disturbance || '--'} />
+                  </div>
+                </div>
+                <div className="native-macro-panel">
+                  <h4>主要风险</h4>
+                  <ul className="native-analysis-list">
+                    {((macro.macro || macro).risk_factors || ['暂无主要风险提示']).slice(0, 5).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              {Array.isArray((macro.macro || macro).global_indices) && (
+                <div className="native-macro-panel">
+                  <h4>全球指数</h4>
+                  <div className="native-index-list">
+                    {(macro.macro || macro).global_indices.slice(0, 8).map((item) => (
+                      <div className="native-index-row" key={`${item.name}-${item.as_of}`}>
+                        <strong>{item.name}</strong>
+                        <span>{item.latest ?? '--'}</span>
+                        <span className={item.change_pct >= 0 ? 'tone-up' : 'tone-down'}>
+                          {item.change_pct != null ? `${item.change_pct >= 0 ? '+' : ''}${item.change_pct}%` : '--'}
+                        </span>
+                        <small>{item.as_of || item.source || ''}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="muted native-empty-line">点击刷新查看宏观数据</p>
+          )}
         </div>
       )}
     </section>
