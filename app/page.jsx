@@ -1250,6 +1250,76 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
   );
 }
 
+function FundAnalysisView() {
+  const analysisUrl = process.env.NEXT_PUBLIC_ANALYSIS_URL || 'http://127.0.0.1:3000';
+  const analysisHealthUrl = process.env.NEXT_PUBLIC_ANALYSIS_HEALTH_URL || 'http://127.0.0.1:8000/api/health';
+  const [status, setStatus] = useState('checking');
+
+  const checkStatus = useCallback(async () => {
+    setStatus('checking');
+    try {
+      const response = await fetch(analysisHealthUrl, { cache: 'no-store' });
+      setStatus(response.ok ? 'ready' : 'offline');
+    } catch (err) {
+      setStatus('offline');
+    }
+  }, [analysisHealthUrl]);
+
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  return (
+    <section className="analysis-workspace" aria-label="基金分析">
+      <div className="analysis-toolbar glass">
+        <div>
+          <div className="analysis-title">基金分析</div>
+          <div className="muted analysis-subtitle">
+            本地深度分析服务：{analysisUrl}
+          </div>
+        </div>
+        <div className="analysis-actions">
+          <button className="button secondary analysis-button" onClick={checkStatus}>
+            重新检测
+          </button>
+          <button className="button analysis-button" onClick={() => window.open(analysisUrl, '_blank', 'noopener,noreferrer')}>
+            打开分析系统
+          </button>
+        </div>
+      </div>
+
+      {status === 'ready' ? (
+        <div className="analysis-frame-shell glass">
+          <iframe
+            className="analysis-frame"
+            title="基金分析系统"
+            src={analysisUrl}
+          />
+        </div>
+      ) : (
+        <div className="analysis-empty glass card">
+          <div className="analysis-empty-icon">⌁</div>
+          <h2>{status === 'checking' ? '正在检测基金分析服务' : '请先启动基金分析服务'}</h2>
+          <p className="muted">
+            在本机运行 fund-analysis-agent 的 start_local.command 后，再点击重新检测。
+          </p>
+          <code className="analysis-command">
+            /Users/cheoungfoon/Desktop/ssssgenius-ai power/fund-analysis-agent/start_local.command
+          </code>
+          <div className="analysis-actions">
+            <button className="button secondary analysis-button" onClick={checkStatus}>
+              重新检测
+            </button>
+            <button className="button analysis-button" onClick={() => window.open(analysisUrl, '_blank', 'noopener,noreferrer')}>
+              打开分析系统
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AddResultModal({ failures, onClose }) {
   return (
     <motion.div
@@ -1954,6 +2024,7 @@ function GroupSummary({ funds, holdings, groupName, getProfit }) {
 }
 
 export default function HomePage() {
+  const [activeWorkbenchTab, setActiveWorkbenchTab] = useState('realtime');
   const [funds, setFunds] = useState([]);
   const [intradayMap, setIntradayMap] = useState({});
   const [loading, setLoading] = useState(false);
@@ -3855,6 +3926,20 @@ export default function HomePage() {
             )}
           </AnimatePresence>
         </div>
+        <nav className="workspace-tabs" aria-label="基金工作台">
+          <button
+            className={`workspace-tab ${activeWorkbenchTab === 'realtime' ? 'active' : ''}`}
+            onClick={() => setActiveWorkbenchTab('realtime')}
+          >
+            实时估值
+          </button>
+          <button
+            className={`workspace-tab ${activeWorkbenchTab === 'analysis' ? 'active' : ''}`}
+            onClick={() => setActiveWorkbenchTab('analysis')}
+          >
+            基金分析
+          </button>
+        </nav>
         <div className="actions">
           {hasUpdate && (
             <div
@@ -4002,6 +4087,7 @@ export default function HomePage() {
         </div>
       </div>
 
+      {activeWorkbenchTab === 'realtime' ? (
       <div className="grid">
         <div className="col-12 glass card add-fund-section" role="region" aria-label="添加基金">
           <div className="title" style={{ marginBottom: 12 }}>
@@ -4783,6 +4869,9 @@ export default function HomePage() {
           )}
         </div>
       </div>
+      ) : (
+        <FundAnalysisView />
+      )}
 
       <AnimatePresence>
         {fundDeleteConfirm && (
