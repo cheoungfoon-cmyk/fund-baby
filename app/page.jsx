@@ -3399,13 +3399,19 @@ export default function HomePage() {
 
     setLoginLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      setLoginError('');
+      setLoginSuccess('');
+      // 超时保护：10秒后如果没响应，主动报错
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('连接超时，请检查网络或重试')), 10000)
+      );
+      const otpPromise = supabase.auth.signInWithOtp({
         email: loginEmail.trim(),
         options: {
           shouldCreateUser: true,
-          emailRedirectTo: window.location.origin
         }
       });
+      const { error } = await Promise.race([otpPromise, timeoutPromise.then(() => { throw new Error('连接超时，请检查网络或重试'); })]);
       if (error) throw error;
       setLoginSuccess('验证码已发送，请查收邮箱输入验证码完成注册/登录');
     } catch (err) {

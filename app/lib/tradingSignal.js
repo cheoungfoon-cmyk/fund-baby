@@ -32,10 +32,10 @@ export const SIGNAL_WEIGHTS = {
 };
 
 const THRESHOLDS = {
-  BUY_STRONG: 0.30,    // netScore >= 0.30 → 买入
-  BUY_WATCH: 0.15,     // netScore >= 0.15 → 关注买入
-  SELL_WATCH: -0.15,   // netScore <= -0.15 → 关注卖出
-  SELL_STRONG: -0.30,  // netScore <= -0.30 → 卖出
+  BUY_STRONG: 0.20,    // netScore >= 0.20 → 买入
+  BUY_WATCH: 0.08,     // netScore >= 0.08 → 关注买入
+  SELL_WATCH: -0.08,   // netScore <= -0.08 → 关注卖出
+  SELL_STRONG: -0.20,  // netScore <= -0.20 → 卖出
 };
 
 /**
