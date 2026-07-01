@@ -1408,7 +1408,9 @@ function NativeAnalysisResult({ result, showRaw, onToggleRaw }) {
 }
 
 function FundAnalysisView() {
-  const apiBase = process.env.NEXT_PUBLIC_ANALYSIS_API_URL || DEFAULT_ANALYSIS_API_URL;
+  const defaultApiBase = process.env.NEXT_PUBLIC_ANALYSIS_API_URL || DEFAULT_ANALYSIS_API_URL;
+  const [apiBase, setApiBase] = useState(defaultApiBase);
+  const [apiBaseDraft, setApiBaseDraft] = useState(defaultApiBase);
   const [serviceStatus, setServiceStatus] = useState('checking');
   const [innerTab, setInnerTab] = useState('single');
   const [code, setCode] = useState('');
@@ -1434,6 +1436,14 @@ function FundAnalysisView() {
   const [batchResults, setBatchResults] = useState([]);
   const [macro, setMacro] = useState(null);
   const [macroLoading, setMacroLoading] = useState(false);
+
+  useEffect(() => {
+    const savedApiBase = window.localStorage.getItem('fundBabyAnalysisApiBase');
+    if (savedApiBase) {
+      setApiBase(savedApiBase);
+      setApiBaseDraft(savedApiBase);
+    }
+  }, []);
 
   const requestApi = useCallback(async (path, options = {}) => {
     const controller = new AbortController();
@@ -1467,6 +1477,15 @@ function FundAnalysisView() {
       setServiceStatus('offline');
     }
   }, [requestApi]);
+
+  const saveApiBase = () => {
+    const nextApiBase = apiBaseDraft.trim() || defaultApiBase;
+    window.localStorage.setItem('fundBabyAnalysisApiBase', nextApiBase);
+    setApiBase(nextApiBase);
+    setError('');
+    setServiceStatus('checking');
+    if (nextApiBase === apiBase) checkStatus();
+  };
 
   const loadMyFunds = useCallback(async () => {
     setPortfolioLoading(true);
@@ -1595,12 +1614,12 @@ function FundAnalysisView() {
         <div>
           <div className="analysis-title">基金分析</div>
           <div className="muted analysis-subtitle">
-            原生分析工作台，连接本机服务：{apiBase}
+            原生分析工作台，连接云端分析服务：{apiBase}
           </div>
         </div>
         <div className="analysis-actions">
           <AnalysisPill tone={serviceStatus === 'ready' ? 'up' : serviceStatus === 'checking' ? 'warn' : 'down'}>
-            {serviceStatus === 'ready' ? '服务已连接' : serviceStatus === 'checking' ? '检测中' : '服务未启动'}
+            {serviceStatus === 'ready' ? '云端已连接' : serviceStatus === 'checking' ? '检测中' : '云端未连接'}
           </AnalysisPill>
           <button className="button secondary analysis-button" onClick={checkStatus}>
             重新检测
@@ -1627,11 +1646,19 @@ function FundAnalysisView() {
       {serviceStatus === 'offline' && (
         <div className="analysis-empty glass card compact">
           <div className="analysis-empty-icon">⌁</div>
-          <h2>请先启动基金分析服务</h2>
-          <p className="muted">本页已经合并到养基小宝；这里提示的是本机分析引擎还没连接上，不需要你手动抓数据。</p>
-          <code className="analysis-command">
-            /Users/cheoungfoon/Desktop/ssssgenius-ai power/fund-analysis-agent/start_local.command
-          </code>
+          <h2>云端分析服务还没连接上</h2>
+          <p className="muted">基金分析会直接在网页里使用云端引擎，不需要你每天启动本机服务。这里通常表示云端还没部署完成，或服务地址需要更新。</p>
+          <div className="native-analysis-search compact analysis-config-row">
+            <input
+              className="input"
+              value={apiBaseDraft}
+              onChange={(event) => setApiBaseDraft(event.target.value)}
+              placeholder="填写云端分析接口地址"
+            />
+            <button className="button analysis-button" onClick={saveApiBase}>
+              保存并检测
+            </button>
+          </div>
         </div>
       )}
 

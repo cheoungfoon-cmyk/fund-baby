@@ -1,4 +1,4 @@
-export const DEFAULT_ANALYSIS_API_URL = 'http://127.0.0.1:8000';
+export const DEFAULT_ANALYSIS_API_URL = 'https://fund-baby-analysis.onrender.com';
 
 export function normalizeApiBase(input) {
   const raw = typeof input === 'string' ? input.trim() : '';

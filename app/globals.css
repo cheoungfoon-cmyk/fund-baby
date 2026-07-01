@@ -617,6 +617,10 @@ input[type="number"] {
   margin: 14px 0;
 }
 
+.analysis-config-row {
+  width: min(100%, 820px);
+}
+
 .native-position-toggle {
   display: flex;
   justify-content: flex-start;
