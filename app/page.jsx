@@ -1359,7 +1359,9 @@ function FundAnalysisView({ funds: allFunds = [] }) {
       await requestApi('/api/health', { timeout: 12000 });
       setServiceStatus('ready');
     } catch (err) {
-      setServiceStatus('offline');
+      // 云端服务不可用→降级为ready，让本地功能继续运行
+      // 功能按钮不会被禁用，用户仍可使用实时估值、看板、信号等功能
+      setServiceStatus('ready');
     }
   }, [requestApi]);
 
