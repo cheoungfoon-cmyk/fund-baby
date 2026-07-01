@@ -1501,6 +1501,103 @@ summary.native-analysis-summary {
 .pd-signal-chip.sell { background: rgba(255, 91, 115, 0.1); color: #ff5b73; }
 .pd-signal-chip.alert { background: rgba(255, 209, 102, 0.1); color: #ffd166; }
 
+/* ===== 基金经理建议卡片 ===== */
+
+.pd-advice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pd-fund-card {
+  padding: 14px 16px;
+  border: 1px solid rgba(105, 222, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(13, 35, 60, 0.86), rgba(8, 22, 40, 0.78)),
+    rgba(8, 23, 42, 0.82);
+}
+
+.pd-fund-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pd-fund-info strong {
+  font-size: 15px;
+  color: #e8f6ff;
+}
+
+.pd-advice-box {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(8, 23, 42, 0.5);
+  margin-bottom: 10px;
+}
+
+.pd-advice-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e8f6ff;
+}
+
+.pd-reasons {
+  margin-bottom: 8px;
+}
+
+.pd-reason-label {
+  display: block;
+  font-size: 11px;
+  color: #8ea9bc;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.pd-reason-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  color: #d8e9f4;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.pd-position-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(8, 23, 42, 0.4);
+  margin-bottom: 8px;
+}
+
+.pd-score-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pd-score-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(142, 169, 188, 0.15);
+  overflow: hidden;
+}
+
+.pd-score-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+
 @media (max-width: 760px) {
   .pd-stat-card {
     min-width: 80px;

@@ -308,7 +308,60 @@ export function evaluatePortfolio(fundSignals) {
   };
 }
 
+/** 生成基金经理级别的可读建议 */
+export function generateManagerAdvice(signal, fund, position) {
+  if (!signal) return {};
+  const signalTexts = (signal.signals || []).map(s => s.name + (s.detail ? '(' + s.detail + ')' : ''));
+  const buyTexts = (signal.buySignals || []).map(s => s.name + (s.detail ? '(' + s.detail + ')' : ''));
+  const sellTexts = (signal.sellSignals || []).map(s => s.name + (s.detail ? '(' + s.detail + ')' : ''));
+  
+  // 生成总结
+  let summary = '';
+  if (signal.action === 'buy') {
+    summary = '今天偏向买入。' + (buyTexts.slice(0, 2).join('；') || '技术面显示机会');
+  } else if (signal.action === 'sell') {
+    summary = '今天偏向卖出/减仓。' + (sellTexts.slice(0, 2).join('；') || '技术面显示风险');
+  } else if (signal.action === 'watch_buy') {
+    summary = '保持关注，有买入机会。' + (buyTexts.slice(0, 1).join('') || '');
+  } else if (signal.action === 'watch_sell') {
+    summary = '保持关注，有减仓信号。' + (sellTexts.slice(0, 1).join('') || '');
+  } else {
+    summary = '当前信号不明确，建议观望。';
+  }
+  
+  // 仓位建议
+  let positionAdvice = '';
+  if (position && position.share > 0) {
+    const nav = Number(fund?.dwjz || 0);
+    const cost = position.cost || 0;
+    if (nav > 0 && cost > 0) {
+      const pnl = (nav - cost) / cost * 100;
+      if (signal.action === 'buy') {
+        positionAdvice = '当前可以分批加仓，控制节奏不要一次买满。';
+      } else if (signal.action === 'sell') {
+        if (pnl > 10) positionAdvice = '当前盈利尚可，可以考虑止盈一部分。';
+        else if (pnl < -10) positionAdvice = '当前亏算较大，考虑止损控制风险。';
+        else positionAdvice = '可以考虑减仓控制整体仓位。';
+      } else if (Math.abs(pnl) < 5) {
+        positionAdvice = '盈亏不大，不适合频繁操作，继续持有观察。';
+      }
+    }
+  } else {
+    if (signal.action === 'buy') positionAdvice = '轻仓试探，控制在计划仓位的30%以内。';
+    else positionAdvice = '暂无持仓，观望为主。';
+  }
+
+  return {
+    summary,
+    positionAdvice,
+    keySignals: signalTexts.slice(0, 5),
+    buySignals: buyTexts,
+    sellSignals: sellTexts,
+  };
+}
+
 export default {
   evaluateFundSignal,
   evaluatePortfolio,
+  generateManagerAdvice,
 };
