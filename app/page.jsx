@@ -1628,7 +1628,7 @@ function FundAnalysisView() {
         <div className="analysis-empty glass card compact">
           <div className="analysis-empty-icon">⌁</div>
           <h2>请先启动基金分析服务</h2>
-          <p className="muted">本页已经合并到养基小宝，但深度分析仍需要你电脑上的 Python 服务来抓取实时数据。</p>
+          <p className="muted">本页已经合并到养基小宝；这里提示的是本机分析引擎还没连接上，不需要你手动抓数据。</p>
           <code className="analysis-command">
             /Users/cheoungfoon/Desktop/ssssgenius-ai power/fund-analysis-agent/start_local.command
           </code>
