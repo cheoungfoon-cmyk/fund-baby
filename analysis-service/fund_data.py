@@ -153,6 +153,12 @@ def get_fund_nav_history(code: str, days: int = 90) -> Optional[pd.DataFrame]:
     优先级：AKShare > efinance > Tencent（净值估值仅作参考）
     返回 DataFrame，包含 净值日期、单位净值、日增长率 等列
     """
+    if _fast_data_mode():
+        em_df = _get_eastmoney_nav_history(code, days=days)
+        if em_df is not None and not em_df.empty:
+            logger.info(f"[fast:eastmoney] 获取净值数据成功: {code}, 共 {len(em_df)} 条")
+            return em_df
+
     best_df = None
 
     # 尝试 akshare
@@ -225,6 +231,49 @@ def get_fund_nav_history(code: str, days: int = 90) -> Optional[pd.DataFrame]:
 
     logger.error(f"所有数据源均无法获取基金 {code} 的净值数据")
     return None
+
+
+def _get_eastmoney_nav_history(code: str, days: int = 120) -> Optional[pd.DataFrame]:
+    """直接从东方财富单基金接口获取历史净值，避免云端加载全量数据。"""
+    try:
+        import httpx
+
+        page_size = max(20, min(int(days or 120), 365))
+        url = "https://api.fund.eastmoney.com/f10/lsjz"
+        params = {
+            "fundCode": code,
+            "pageIndex": 1,
+            "pageSize": page_size,
+            "startDate": "",
+            "endDate": "",
+        }
+        headers = {
+            "Referer": "https://fundf10.eastmoney.com/",
+            "User-Agent": "Mozilla/5.0",
+        }
+        with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+            resp = client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        rows = (payload.get("Data") or {}).get("LSJZList") or []
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows)
+        df = df.rename(columns={
+            "FSRQ": "净值日期",
+            "DWJZ": "单位净值",
+            "LJJZ": "累计净值",
+            "JZZZL": "日增长率",
+        })
+        df = _normalize_nav_df(df, source="eastmoney_direct")
+        if df is None or df.empty:
+            return None
+        return df.sort_values("净值日期", ascending=True)
+    except Exception as e:
+        logger.warning(f"[fast:eastmoney] 获取净值数据失败: {code}, error={e}")
+        return None
 
 
 def _normalize_nav_df(df: pd.DataFrame, source: str = "unknown") -> Optional[pd.DataFrame]:
