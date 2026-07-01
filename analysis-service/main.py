@@ -80,6 +80,50 @@ def _fast_macro_placeholder() -> dict:
     }
 
 
+def _fast_prediction_from_forecast(forecast: dict) -> dict:
+    periods = {}
+    for days in (1, 3, 7, 30):
+        item = (forecast or {}).get(f"forecast_{days}d") or {}
+        up_probability = item.get("up_probability", 50)
+        down_probability = item.get("down_probability", 50)
+        try:
+            up_probability = float(up_probability)
+        except (TypeError, ValueError):
+            up_probability = 50.0
+        try:
+            down_probability = float(down_probability)
+        except (TypeError, ValueError):
+            down_probability = 100.0 - up_probability
+
+        if up_probability >= down_probability + 12:
+            direction = "up"
+        elif down_probability >= up_probability + 12:
+            direction = "down_or_flat"
+        else:
+            direction = "uncertain"
+
+        periods[f"{days}d"] = {
+            "period_days": days,
+            "predicted_direction": direction,
+            "direction_label": item.get("direction", "不确定"),
+            "up_probability": round(up_probability, 2),
+            "down_or_flat_probability": round(max(down_probability, 100.0 - up_probability), 2),
+            "confidence": item.get("confidence", "低"),
+            "main_reasons": item.get("reasons", [])[:3],
+            "has_positive_edge": direction == "up" and up_probability >= 58,
+            "method": "fast_forecast_projection",
+        }
+
+    return {
+        "status": "ok",
+        "model_basis": "fast_forecast_projection",
+        "quality": "medium",
+        "summary": "云端快速模式：使用规则走势情景生成轻量短线判断，跳过重模型训练。",
+        "periods": periods,
+        "disclaimer": "仅供个人研究参考，不构成投资建议。",
+    }
+
+
 @app.middleware("http")
 async def add_private_network_access_header(request, call_next):
     response = await call_next(request)
@@ -160,13 +204,16 @@ def _run_analysis(code: str, position: Optional[dict] = None) -> AnalyzeResponse
     )
 
     # Step 6.7: 短线预测（专注1天、3天、7天）
-    from short_term_prediction import short_term_prediction
-    prediction = short_term_prediction(
-        nav_df,
-        fund_code=code,
-        fund_name=fund_info.get("name", ""),
-        fund_type=fund_info.get("type", "")
-    )
+    if _fast_data_mode():
+        prediction = _fast_prediction_from_forecast(forecast)
+    else:
+        from short_term_prediction import short_term_prediction
+        prediction = short_term_prediction(
+            nav_df,
+            fund_code=code,
+            fund_name=fund_info.get("name", ""),
+            fund_type=fund_info.get("type", "")
+        )
     logger.info(
         f"短线预测: quality={prediction.get('quality')}, "
         f"method={prediction.get('model_basis')}"
