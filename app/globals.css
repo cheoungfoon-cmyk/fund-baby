@@ -885,7 +885,7 @@ summary.native-analysis-summary {
 
 
 
-/* ===== 观点看板 (ViewpointsBoard) ===== */
+
 
 .vp-container {
   max-width: 100%;
@@ -1310,6 +1310,204 @@ summary.native-analysis-summary {
     flex-direction: column;
   }
 }
+
+
+/* ===== 组合看板 (PortfolioDashboard) ===== */
+
+.pd-container {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 0;
+  background:
+    linear-gradient(180deg, rgba(13, 35, 60, 0.86), rgba(8, 22, 40, 0.78)),
+    rgba(8, 23, 42, 0.82);
+}
+
+.pd-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pd-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid rgba(105, 222, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 23, 42, 0.5);
+  min-height: 54px;
+  min-width: 100px;
+  flex: 1 0 auto;
+}
+
+.pd-stat-label {
+  font-size: 11px;
+  color: #8ea9bc;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.pd-stat-value {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #e8f6ff;
+}
+
+.pd-stat-value small {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8ea9bc;
+  margin-left: 4px;
+}
+
+.pd-up .pd-stat-value {
+  color: #43f2bd;
+}
+
+.pd-down .pd-stat-value {
+  color: #ff5b73;
+}
+
+.pd-signal-stack {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 13px;
+}
+
+.pd-signal-buy,
+.pd-signal-sell,
+.pd-signal-warn,
+.pd-signal-hold {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.pd-signal-buy {
+  background: rgba(67, 242, 189, 0.15);
+  color: #43f2bd;
+  border: 1px solid rgba(67, 242, 189, 0.25);
+}
+
+.pd-signal-sell {
+  background: rgba(255, 91, 115, 0.15);
+  color: #ff5b73;
+  border: 1px solid rgba(255, 91, 115, 0.25);
+}
+
+.pd-signal-warn {
+  background: rgba(255, 209, 102, 0.15);
+  color: #ffd166;
+  border: 1px solid rgba(255, 209, 102, 0.25);
+}
+
+.pd-signal-hold {
+  background: rgba(142, 169, 188, 0.1);
+  color: #8ea9bc;
+}
+
+.pd-alert-stat .pd-stat-value {
+  color: #ffd166;
+}
+
+.pd-alert-details {
+  margin-top: 12px;
+  border: 1px solid rgba(105, 222, 255, 0.18);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pd-alert-summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  background: rgba(13, 46, 72, 0.9);
+  user-select: none;
+  color: #bdefff;
+}
+
+.pd-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 12px;
+}
+
+.pd-alert-item {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.pd-alert-item.pd-alert-danger {
+  background: rgba(255, 91, 115, 0.08);
+  border: 1px solid rgba(255, 91, 115, 0.18);
+}
+
+.pd-alert-item.pd-alert-warning {
+  background: rgba(255, 209, 102, 0.08);
+  border: 1px solid rgba(255, 209, 102, 0.18);
+}
+
+.pd-alert-item.pd-alert-info {
+  background: rgba(67, 242, 189, 0.08);
+  border: 1px solid rgba(67, 242, 189, 0.18);
+}
+
+.pd-alert-body strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+  color: #e8f6ff;
+}
+
+.pd-alert-body p {
+  margin: 0;
+  font-size: 12px;
+  color: #8ea9bc;
+}
+
+.pd-alert-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pd-signal-chip {
+  display: inline-flex;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: #8ea9bc;
+}
+
+.pd-signal-chip.buy { background: rgba(67, 242, 189, 0.1); color: #43f2bd; }
+.pd-signal-chip.sell { background: rgba(255, 91, 115, 0.1); color: #ff5b73; }
+.pd-signal-chip.alert { background: rgba(255, 209, 102, 0.1); color: #ffd166; }
+
+@media (max-width: 760px) {
+  .pd-stat-card {
+    min-width: 80px;
+    flex: 1 1 calc(50% - 10px);
+  }
+}
+
 /* 原始数据暗色兼容 */
 pre.native-analysis-raw {
   background: rgba(0, 0, 0, 0.08);

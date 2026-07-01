@@ -17,8 +17,9 @@ import wxChatImg from "./assets/wxChat.jpeg";
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { buildAnalysisApiUrl, DEFAULT_ANALYSIS_API_URL } from './lib/analysisApi.mjs';
 import FundComparison from "./components/FundComparison";
-import ViewpointsBoard from "./components/ViewpointsBoard";
 import FundAnalysisResult from "./components/FundAnalysisResult";
+import { evaluateFundSignal } from "./lib/tradingSignal";
+import PortfolioDashboard from "./components/PortfolioDashboard";
 import { analyzeFund, calcPortfolioRisk } from './lib/localAnalysis';
 import { fetchFundData, fetchIntradayData, fetchLatestRelease, fetchShanghaiIndexDate, fetchSmartFundNetValue, searchFunds, submitFeedback } from './api/fund';
 import packageJson from '../package.json';
@@ -1517,7 +1518,7 @@ function FundAnalysisView({ funds: allFunds = [] }) {
           ['portfolio', '我的组合'],
           ['market', '宏观一览'],
           ['compare', '基金对比'],
-          ['viewpoints', '观点看板'],
+
         ].map(([key, label]) => (
           <button
             key={key}
@@ -1763,9 +1764,7 @@ function FundAnalysisView({ funds: allFunds = [] }) {
       {innerTab === 'compare' && (
         <FundComparison funds={allFunds} fundTrends={trendMap} />
       )}
-      {innerTab === 'viewpoints' && (
-        <ViewpointsBoard />
-      )}
+
     </section>
   );
 }
@@ -4539,6 +4538,9 @@ export default function HomePage() {
 
       {activeWorkbenchTab === 'realtime' ? (
       <div className="grid">
+        <div className="col-12" style={{ marginBottom: 12 }}>
+          <PortfolioDashboard funds={funds} holdings={holdings} config={{}} />
+        </div>
         <div className="col-12 glass card add-fund-section" role="region" aria-label="添加基金">
           <div className="title" style={{ marginBottom: 12 }}>
             <PlusIcon width="20" height="20" />
