@@ -3408,7 +3408,10 @@ export default function HomePage() {
       const result = await Promise.race([
         supabase.auth.signInWithOtp({
           email: loginEmail.trim(),
-          options: { shouldCreateUser: true }
+          options: {
+            shouldCreateUser: true,
+            emailRedirectTo: 'https://cheoungfoon-cmyk.github.io/fund-baby/'
+          }
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_SEC * 1000)
