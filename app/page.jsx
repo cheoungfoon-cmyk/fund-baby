@@ -16,6 +16,10 @@ import githubImg from "./assets/github.svg";
 import wxChatImg from "./assets/wxChat.jpeg";
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { buildAnalysisApiUrl, DEFAULT_ANALYSIS_API_URL } from './lib/analysisApi.mjs';
+import FundComparison from "./components/FundComparison";
+import ViewpointsBoard from "./components/ViewpointsBoard";
+import FundAnalysisResult from "./components/FundAnalysisResult";
+import { analyzeFund, calcPortfolioRisk } from './lib/localAnalysis';
 import { fetchFundData, fetchIntradayData, fetchLatestRelease, fetchShanghaiIndexDate, fetchSmartFundNetValue, searchFunds, submitFeedback } from './api/fund';
 import packageJson from '../package.json';
 
@@ -140,7 +144,7 @@ function FeedbackModal({ onClose, user, onOpenWeChat }) {
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
               <p className="muted" style={{ fontSize: '12px', lineHeight: '1.6' }}>
-                如果您有 Github 账号，也可以在本项目
+                如果您有 GitHub 账号，也可以在本项目
                 <a
                   href="https://github.com/zhengshengning/fund-baby/issues"
                   target="_blank"
@@ -148,7 +152,7 @@ function FeedbackModal({ onClose, user, onOpenWeChat }) {
                   className="link-button"
                   style={{ color: 'var(--primary)', textDecoration: 'underline', padding: '0 4px', fontWeight: 600 }}
                 >
-                  Issues
+                  讨论区
                 </a>
                 区留言互动
               </p>
@@ -1277,137 +1281,17 @@ function formatAnalysisError(error) {
   return `请求失败：${error.message || '请确认本地基金分析服务已启动'}`;
 }
 
-function NativeAnalysisResult({ result, showRaw, onToggleRaw }) {
-  if (!result) return null;
-  if (!result.success) {
-    return (
-      <div className="native-analysis-card native-analysis-error">
-        <h3>分析失败</h3>
-        <p>{result.error || '没有拿到有效分析结果'}</p>
-      </div>
-    );
-  }
 
-  const fund = result.fund || {};
-  const metrics = result.metrics || {};
-  const analysis = result.analysis || {};
-  const risk = result.risk || {};
-  const prediction = result.prediction || {};
-  const finalDecision = result.final_decision || {};
-  const highConfidence = result.high_confidence_decision || {};
-  const decisionTone = getDecisionTone(finalDecision.action || highConfidence.action);
-
-  return (
-    <div className="native-analysis-results">
-      <div className="native-analysis-card hero-decision">
-        <div className="native-analysis-card-head">
-          <div>
-            <span className="native-analysis-kicker">最终参考结论</span>
-            <h2>{finalDecision.headline || analysis.conclusion || fund.name || '分析结果'}</h2>
-          </div>
-          <AnalysisPill tone={decisionTone}>
-            {finalDecision.action_label || highConfidence.action_label || '观察'}
-          </AnalysisPill>
-        </div>
-        <p className="native-analysis-summary">
-          {finalDecision.summary || analysis.note || '本结果仅供个人研究参考，不构成投资建议。'}
-        </p>
-        <div className="native-analysis-metrics-grid compact">
-          <AnalysisMetric label="置信度" value={finalDecision.confidence || analysis.confidence || '--'} tone={decisionTone} />
-          <AnalysisMetric label="风险分" value={finalDecision.risk_score ?? risk.risk_score} />
-          <AnalysisMetric label="7天上涨概率" value={finalDecision.up_probability_7d != null ? `${finalDecision.up_probability_7d}%` : '--'} />
-          <AnalysisMetric label="30天上涨概率" value={finalDecision.up_probability_30d != null ? `${finalDecision.up_probability_30d}%` : '--'} />
-        </div>
-        {Array.isArray(finalDecision.why) && finalDecision.why.length > 0 && (
-          <ul className="native-analysis-list">
-            {finalDecision.why.slice(0, 3).map((item, index) => <li key={index}>{item}</li>)}
-          </ul>
-        )}
-      </div>
-
-      <div className="native-analysis-grid two">
-        <div className="native-analysis-card">
-          <div className="native-analysis-card-head">
-            <div>
-              <span className="native-analysis-kicker">基金信息</span>
-              <h3>{fund.name || '未知基金'}</h3>
-            </div>
-            <span className="fund-code-badge">#{fund.code || '--'}</span>
-          </div>
-          <div className="native-analysis-tags">
-            <AnalysisPill>{fund.type || '类型未知'}</AnalysisPill>
-            <AnalysisPill>{fund.company || '公司未知'}</AnalysisPill>
-            {metrics.current_estimate?.estimate_time && <AnalysisPill>估值 {metrics.current_estimate.estimate_time}</AnalysisPill>}
-          </div>
-          <div className="native-analysis-metrics-grid">
-            <AnalysisMetric label="最新净值" value={metrics.latest_nav} />
-            <AnalysisMetric label="日涨跌" value={metrics.daily_return != null ? `${metrics.daily_return}%` : '--'} tone={metrics.daily_return >= 0 ? 'up' : 'down'} />
-            <AnalysisMetric label="估算涨跌" value={metrics.current_estimate?.estimated_change_pct != null ? `${metrics.current_estimate.estimated_change_pct}%` : '--'} tone={metrics.current_estimate?.estimated_change_pct >= 0 ? 'up' : 'down'} />
-            <AnalysisMetric label="最大回撤" value={metrics.max_drawdown != null ? `${metrics.max_drawdown}%` : '--'} tone="down" />
-          </div>
-        </div>
-
-        <div className="native-analysis-card">
-          <div className="native-analysis-card-head">
-            <div>
-              <span className="native-analysis-kicker">风险与预测</span>
-              <h3>{risk.risk_level || '风险画像'}</h3>
-            </div>
-            <AnalysisPill tone={risk.risk_score > 70 ? 'down' : risk.risk_score > 45 ? 'warn' : 'up'}>
-              {risk.risk_score ?? '--'} 分
-            </AnalysisPill>
-          </div>
-          <div className="native-risk-bar">
-            <span style={{ width: `${Math.max(0, Math.min(100, risk.risk_score || 0))}%` }} />
-          </div>
-          <div className="native-analysis-metrics-grid">
-            <AnalysisMetric label="预测质量" value={prediction.quality || '--'} />
-            <AnalysisMetric label="模型依据" value={prediction.model_basis || '--'} />
-            <AnalysisMetric label="短期方向" value={prediction.direction || prediction.trend || '--'} />
-            <AnalysisMetric label="操作建议" value={highConfidence.action_label || '--'} tone={getDecisionTone(highConfidence.action)} />
-          </div>
-        </div>
-      </div>
-
-      <div className="native-analysis-card">
-        <div className="native-analysis-card-head">
-          <div>
-            <span className="native-analysis-kicker">策略细节</span>
-            <h3>买入、减仓与观察条件</h3>
-          </div>
-          <button className="button secondary analysis-button small" onClick={onToggleRaw}>
-            {showRaw ? '收起原始数据' : '查看原始数据'}
-          </button>
-        </div>
-        <div className="native-analysis-grid three">
-          <div>
-            <h4>可考虑买入</h4>
-            <ul className="native-analysis-list">
-              {(analysis.buy_conditions || highConfidence.buy_conditions || ['暂无明确买入条件']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
-            </ul>
-          </div>
-          <div>
-            <h4>需要减仓</h4>
-            <ul className="native-analysis-list">
-              {(analysis.reduce_conditions || highConfidence.sell_conditions || ['暂无明确减仓条件']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
-            </ul>
-          </div>
-          <div>
-            <h4>重点观察</h4>
-            <ul className="native-analysis-list">
-              {(analysis.watch_points || finalDecision.warning || ['继续观察净值、估值和市场风格变化']).slice(0, 4).map((item, index) => <li key={index}>{item}</li>)}
-            </ul>
-          </div>
-        </div>
-        {showRaw && (
-          <pre className="native-analysis-raw">{JSON.stringify(result, null, 2)}</pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FundAnalysisView() {
+function FundAnalysisView({ funds: allFunds = [] }) {
+  const trendMap = (() => {
+    const map = {};
+    for (const fund of allFunds) {
+      if (Array.isArray(fund.historyTrend) && fund.historyTrend.length > 0) {
+        map[fund.code] = fund.historyTrend;
+      }
+    }
+    return map;
+  })();
   const defaultApiBase = process.env.NEXT_PUBLIC_ANALYSIS_API_URL || DEFAULT_ANALYSIS_API_URL;
   const [apiBase, setApiBase] = useState(defaultApiBase);
   const [apiBaseDraft, setApiBaseDraft] = useState(defaultApiBase);
@@ -1632,6 +1516,8 @@ function FundAnalysisView() {
           ['single', '单只分析'],
           ['portfolio', '我的组合'],
           ['market', '宏观一览'],
+          ['compare', '基金对比'],
+          ['viewpoints', '观点看板'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -1746,7 +1632,7 @@ function FundAnalysisView() {
             </div>
           )}
 
-          <NativeAnalysisResult result={result} showRaw={showRaw} onToggleRaw={() => setShowRaw((value) => !value)} />
+          <FundAnalysisResult result={result} showRaw={showRaw} onToggleRaw={() => setShowRaw((value) => !value)} />
         </>
       )}
 
@@ -1873,6 +1759,12 @@ function FundAnalysisView() {
             <p className="muted native-empty-line">点击刷新查看宏观数据</p>
           )}
         </div>
+      )}
+      {innerTab === 'compare' && (
+        <FundComparison funds={allFunds} fundTrends={trendMap} />
+      )}
+      {innerTab === 'viewpoints' && (
+        <ViewpointsBoard />
       )}
     </section>
   );
@@ -4509,7 +4401,7 @@ export default function HomePage() {
               <UpdateIcon width="14" height="14" />
             </div>
           )}
-          <img alt="项目Github地址" src={githubImg.src} style={{ width: '30px', height: '30px', cursor: 'pointer' }} onClick={() => window.open("https://github.com/zhengshengning/fund-baby")} />
+          <img alt="项目 GitHub 仓库" src={githubImg.src} style={{ width: '30px', height: '30px', cursor: 'pointer' }} onClick={() => window.open("https://github.com/zhengshengning/fund-baby")} />
           <button
             className="icon-button"
             onClick={toggleTheme}
@@ -5428,7 +5320,7 @@ export default function HomePage() {
         </div>
       </div>
       ) : (
-        <FundAnalysisView />
+        <FundAnalysisView funds={funds} />
       )}
 
       <AnimatePresence>
@@ -5855,7 +5747,7 @@ export default function HomePage() {
                   color: '#e6a23c',
                   lineHeight: '1.4'
                 }}>
-                  ⚠️ 登录功能目前正在测试，使用过程中如遇到问题欢迎大家在 <a href="https://github.com/zhengshengning/fund-baby/issues" target="_blank" style={{ textDecoration: 'underline', color: 'inherit' }}>Github</a> 上反馈
+                  ⚠️ 登录功能目前正在测试，使用过程中如遇到问题欢迎大家在 <a href="https://github.com/zhengshengning/fund-baby/issues" target="_blank" style={{ textDecoration: 'underline', color: 'inherit' }}>GitHub</a> 上反馈
                 </div>
                 <div className="muted" style={{ marginBottom: 8, fontSize: '0.8rem' }}>
                   请输入邮箱，我们将发送验证码到您的邮箱
