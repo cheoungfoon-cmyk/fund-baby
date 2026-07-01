@@ -4,6 +4,7 @@
 获取不到的内容返回 "unavailable"，前端区分"未知"和"不可用"
 """
 import logging
+import os
 from typing import Dict, Any, Optional
 
 import pandas as pd
@@ -15,6 +16,10 @@ apply_data_provider_no_proxy()
 
 FIELD_UNAVAILABLE = "unavailable"
 FIELD_UNKNOWN = "未知"
+
+
+def _fast_data_mode() -> bool:
+    return os.getenv("FAST_DATA_MODE", "").lower() in {"1", "true", "yes", "on"}
 
 
 def get_fund_profile(code: str) -> Dict[str, Any]:
@@ -39,6 +44,18 @@ def get_fund_profile(code: str) -> Dict[str, Any]:
         "peer_ranking": FIELD_UNAVAILABLE,
         "data_quality": "partial",
     }
+
+    if _fast_data_mode():
+        try:
+            from providers.tencent_fund import get_tencent_nav_estimate
+            est = get_tencent_nav_estimate(code)
+            if est:
+                profile["fund_type"] = FIELD_UNKNOWN
+                profile["data_quality"] = "limited"
+        except Exception as e:
+            logger.warning(f"[profile:fast] 天天基金数据获取失败: {e}")
+        logger.info(f"[profile:fast] 跳过云端重画像查询: {code}")
+        return profile
 
     # 从 fund_name_em 获取类型信息
     try:

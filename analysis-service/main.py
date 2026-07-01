@@ -63,6 +63,23 @@ app.add_middleware(
 )
 
 
+def _fast_data_mode() -> bool:
+    return os.getenv("FAST_DATA_MODE", "").lower() in {"1", "true", "yes", "on"}
+
+
+def _fast_macro_placeholder() -> dict:
+    return {
+        "summary": "云端快速模式：宏观数据未参与本次单只基金分析",
+        "macro_summary": {"text": "云端快速模式：宏观数据未参与本次单只基金分析"},
+        "risk_factors": [],
+        "global_indices": [],
+        "forex": [],
+        "commodities": [],
+        "interbank_rates": [],
+        "status": "skipped",
+    }
+
+
 @app.middleware("http")
 async def add_private_network_access_header(request, call_next):
     response = await call_next(request)
@@ -110,7 +127,7 @@ def _run_analysis(code: str, position: Optional[dict] = None) -> AnalyzeResponse
     logger.info(f"指标计算完成，数据天数: {metrics.get('data_days')}")
 
     # Step 5: 获取宏观因素
-    macro = get_macro_factors()
+    macro = _fast_macro_placeholder() if _fast_data_mode() else get_macro_factors()
     logger.info(f"宏观数据状态: {macro.get('status')}")
 
     # Step 6: 风险评分
@@ -119,18 +136,21 @@ def _run_analysis(code: str, position: Optional[dict] = None) -> AnalyzeResponse
 
     # Step 6.5: 运行回测获取验证结果
     backtest_result = None
-    try:
-        backtest_result = run_backtest(nav_df, horizons=[1, 3, 7, 30], min_samples=10)
-        if "error" not in backtest_result:
-            logger.info(f"回测完成: quality={backtest_result.get('probability_quality')}, "
-                       f"sample_size={backtest_result.get('sample_size')}, "
-                       f"is_calibrated={backtest_result.get('is_calibrated')}")
-        else:
-            logger.info(f"回测跳过: {backtest_result.get('error')}")
+    if _fast_data_mode():
+        logger.info("云端快速模式：跳过回测，避免分析请求超时")
+    else:
+        try:
+            backtest_result = run_backtest(nav_df, horizons=[1, 3, 7, 30], min_samples=10)
+            if "error" not in backtest_result:
+                logger.info(f"回测完成: quality={backtest_result.get('probability_quality')}, "
+                           f"sample_size={backtest_result.get('sample_size')}, "
+                           f"is_calibrated={backtest_result.get('is_calibrated')}")
+            else:
+                logger.info(f"回测跳过: {backtest_result.get('error')}")
+                backtest_result = None
+        except Exception as e:
+            logger.warning(f"回测失败（不阻塞主流程）: {e}")
             backtest_result = None
-    except Exception as e:
-        logger.warning(f"回测失败（不阻塞主流程）: {e}")
-        backtest_result = None
 
     # Step 6.6: 未来走势情景判断
     forecast = generate_forecast(metrics, risk, fund_profile, macro, backtest_result=backtest_result)

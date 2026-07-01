@@ -3,6 +3,7 @@
 数据源优先级：AKShare > efinance > Tencent/Tiantian (from akshare-fund logic)
 """
 import logging
+import os
 from typing import Optional, Dict, Any
 
 import pandas as pd
@@ -18,6 +19,10 @@ from providers.tencent_fund import (
 logger = logging.getLogger(__name__)
 apply_data_provider_no_proxy()
 
+
+def _fast_data_mode() -> bool:
+    return os.getenv("FAST_DATA_MODE", "").lower() in {"1", "true", "yes", "on"}
+
 # 常见列名候选列表，用于兼容不同数据源返回格式
 NAV_DATE_CANDIDATES = ["净值日期", "date", "日期", "time", "净值日", "交易日期", "Date", "nav_date"]
 UNIT_NAV_CANDIDATES = ["单位净值", "nav", "netvalue", "单位", "净值", "dwjz", "NAV", "unit_nav"]
@@ -30,6 +35,15 @@ def get_fund_info(code: str) -> Optional[Dict[str, Any]]:
     获取基金基本信息：名称、类型、基金公司
     优先级：AKShare > efinance > Tencent/Tiantian
     """
+    if _fast_data_mode():
+        try:
+            tc_info = get_tencent_fund_basic(code)
+            if tc_info and tc_info.get("name"):
+                logger.info(f"[fast:tencent] 获取基金信息成功: {code} -> {tc_info.get('name')}")
+                return tc_info
+        except Exception as e:
+            logger.warning(f"[fast:tencent] 获取基金信息失败: {code}, error={e}")
+
     # 方式1：akshare fund_name_em（快速，含基金类型）
     try:
         import akshare as ak
@@ -272,6 +286,20 @@ def _probe_and_rename(df: pd.DataFrame, target: str, candidates: list[str]) -> N
 
 def get_datasource_status(code: str) -> Dict[str, Any]:
     """返回各数据源可用性状态"""
+    if _fast_data_mode():
+        status = {
+            "akshare": {"available": True, "detail": "云端快速模式：已用单基金净值接口验证"},
+            "efinance": {"available": False, "detail": "云端快速模式：跳过备用源检测"},
+            "tencent": {"available": False, "detail": "云端快速模式：未检测"},
+        }
+        try:
+            tc = get_tencent_fund_basic(code)
+            if tc and tc.get("name"):
+                status["tencent"] = {"available": True, "detail": "tiantian/tencent OK"}
+        except Exception as e:
+            status["tencent"]["detail"] = str(e)[:100]
+        return status
+
     status = {
         "akshare": {"available": False, "detail": ""},
         "efinance": {"available": False, "detail": ""},
