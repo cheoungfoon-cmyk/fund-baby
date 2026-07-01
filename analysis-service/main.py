@@ -266,7 +266,12 @@ async def analyze_fund_post(request: AnalyzeRequest):
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
-    return {"status": "ok", "service": "基金决策辅助分析", "version": "2.0.0"}
+    return {
+        "status": "ok",
+        "service": "基金决策辅助分析",
+        "version": "2.0.0",
+        "fast_data_mode": _fast_data_mode(),
+    }
 
 
 @app.get("/api/macro", response_model=MacroResponse)
