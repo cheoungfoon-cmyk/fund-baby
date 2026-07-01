@@ -143,7 +143,7 @@ export default function PortfolioDashboard({ funds, holdings, config }) {
       sellCount: sells.length,
       watchBuyCount: watchBuys.length,
       watchSellCount: watchSells.length,
-      hasAction: buys.length > 0 || sells.length > 0,
+      hasAction: buys.length > 0 || sells.length > 0 || watchBuys.length > 0 || watchSells.length > 0,
       topBuys: buys.slice(0, 3),
       topSells: sells.slice(0, 3),
     };
@@ -271,7 +271,7 @@ export default function PortfolioDashboard({ funds, holdings, config }) {
       )}
 
       {/* ─── 今日全部信号 ──────────────────────── */}
-      {analysis.hasAction && (
+      {analysis.recommendations.length > 0 && (
         <details className="pd-alert-details" style={{ marginTop: 14 }} open>
           <summary className="pd-alert-summary">
             <span>今日信号详情（{analysis.buyCount + analysis.sellCount + analysis.watchBuyCount + analysis.watchSellCount}条）</span>

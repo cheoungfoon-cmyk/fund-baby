@@ -3403,23 +3403,25 @@ export default function HomePage() {
     try {
       setLoginError('');
       setLoginSuccess('');
-      // 超时保护：10秒后如果没响应，主动报错
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('连接超时，请检查网络或重试')), 10000)
-      );
-      const otpPromise = supabase.auth.signInWithOtp({
-        email: loginEmail.trim(),
-        options: {
-          shouldCreateUser: true,
-        }
-      });
-      const { error } = await Promise.race([otpPromise, timeoutPromise.then(() => { throw new Error('连接超时，请检查网络或重试'); })]);
-      if (error) throw error;
+      // 超时保护：15秒后没响应主动报错
+      const TIMEOUT_SEC = 15;
+      const result = await Promise.race([
+        supabase.auth.signInWithOtp({
+          email: loginEmail.trim(),
+          options: { shouldCreateUser: true }
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_SEC * 1000)
+        )
+      ]);
+      if (result?.error) throw result.error;
       setLoginSuccess('验证码已发送，请查收邮箱输入验证码完成注册/登录');
     } catch (err) {
-      if (err.message?.includes('rate limit')) {
+      if (err.message === 'TIMEOUT') {
+        setLoginError('连接超时，请检查网络连接或刷新后重试');
+      } else if (err.message?.includes('rate limit')) {
         setLoginError('请求过于频繁，请稍后再试');
-      } else if (err.message?.includes('network')) {
+      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
         setLoginError('网络错误，请检查网络连接');
       } else {
         setLoginError(err.message || '发送验证码失败，请稍后再试');
